@@ -1,4 +1,4 @@
-mcpulsor-server/target/
+mcpulsor/mcpulsor-server/target/
 !.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/

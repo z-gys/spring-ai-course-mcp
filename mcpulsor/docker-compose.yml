@@ -74,4 +74,3 @@ services:
         ollama pull PetrosStav/gemma3-tools:4b
         wait
       "
-    restart: unless-stopped
