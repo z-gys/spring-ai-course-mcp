@@ -2,13 +2,13 @@ version: "3.9"
 name: mcpulsor-server-and-inspector
 
 services:
-#
+
 #  server-stdio:
 #    build:
 #      context: ..                  # <= REPO ROOT so parent POM is visible
 #      dockerfile: mcpulsor-server/Dockerfile
 #      target: stdio
-#      argso:
+#      args:
 #        MODULE_DIR: mcpulsor-server         # build the server module
 #        #MAIN_CLASS: edu.example.McpExampleServerApplication
 #    image: mcpulsor-server:stdio
@@ -21,16 +21,16 @@ services:
 #    ports:
 #      - "6274:6274"                # Inspector UI (stdio)
 #      - "6277:6277"                # Inspector proxy (stdio)
-#
+
 
   # -------- HTTP: Java MCP server -----------------------------
   server-http:
     build:
       context: ..                  # <= REPO ROOT
-      dockerfile: ./mcpulsor/mcpulsor-server/Dockerfile
+      dockerfile: ./mcpulsor-server/Dockerfile
       target: http
       args:
-        MODULE_DIR: ./mcpulsor/mcpulsor-server
+        MODULE_DIR: ./mcpulsor-server
         #MAIN_CLASS: edu.borisov.mcpulsor.server.McpulsorServerApplication
     image: mcpulsor-server:http
     container_name: mcpulsor-server-http

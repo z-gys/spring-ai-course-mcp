@@ -1,0 +1,8 @@
+spring:
+  application:
+    name: mcpulsor-host
+  ai:
+    ollama:
+      chat:
+        model: gemma3:4b-it-q4_K_M
+      base-url: http://localhost:11434

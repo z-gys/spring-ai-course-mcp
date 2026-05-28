@@ -1,10 +1,12 @@
 package ru.zgys.spring_ai_course_mcp;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapper;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.transport.HttpServletStreamableServerTransportProvider;
+import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
 import lombok.SneakyThrows;
 import org.eclipse.jetty.server.Server;
@@ -30,8 +32,11 @@ public class McpulsorServerApplication {
 
         McpServerFeatures.SyncToolSpecification bioSensorToolSpec = McpServerFeatures.SyncToolSpecification.builder()
                 .tool(bioSensorTool)
-                .callHandler((mcpSyncServerExchange, callToolRequest) ->
-                        new McpSchema.CallToolResult("пульс пользователя 42", false))
+                .callHandler((mcpSyncServerExchange, callToolRequest) -> {
+                    String days = callToolRequest.arguments().get("days").toString();
+                    return new McpSchema.CallToolResult("пульс пользователя за " + days + " дней был 42 ударов в минуту", false);
+                        }
+                )
                 .build();
 
         McpServer.sync(transportProvider)
@@ -53,7 +58,13 @@ public class McpulsorServerApplication {
     }
 
     private static String createBioSensorInputSchema() {
-        return new ObjectMapper().createObjectNode().put("type", "object").toString();
+        ObjectNode root = new ObjectMapper().createObjectNode().put("type", "object");
+        root.putObject("properties")
+                .putObject("days")
+                .put("type", "integer")
+                .put("description", "Number of past days to include in the pulse reading request");
+        root.putArray("required").add("days");
+        return root.toString();
     }
 
     private static McpSchema.ServerCapabilities createServerCapabilities() {
