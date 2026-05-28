@@ -13,6 +13,9 @@ import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
 
+import java.util.HashMap;
+import java.util.Map;
+
 public class McpulsorServerApplication {
 
     @SneakyThrows
@@ -28,13 +31,14 @@ public class McpulsorServerApplication {
                 .title("Human Vital Pulsor Sensor")
                 .description("Returns the current heart rate of the user as a simple string value.")
                 .inputSchema(new JacksonMcpJsonMapper(new ObjectMapper()), createBioSensorInputSchema())
+                .outputSchema(new JacksonMcpJsonMapper(new ObjectMapper()), createBioSensorOutputSchema())
                 .build();
 
         McpServerFeatures.SyncToolSpecification bioSensorToolSpec = McpServerFeatures.SyncToolSpecification.builder()
                 .tool(bioSensorTool)
                 .callHandler((mcpSyncServerExchange, callToolRequest) -> {
-                    String days = callToolRequest.arguments().get("days").toString();
-                    return new McpSchema.CallToolResult("пульс пользователя за " + days + " дней был 42 ударов в минуту", false);
+                    Integer days = (Integer) callToolRequest.arguments().get("days");
+                    return calculateResult(days);
                         }
                 )
                 .build();
@@ -55,6 +59,30 @@ public class McpulsorServerApplication {
         server.start();
         server.join();
 
+    }
+
+    private static McpSchema.CallToolResult calculateResult(Integer days) {
+        Map<String, Object> properties = new HashMap<>();
+        properties.put("pulse", "твой пульс " + 42 + days);
+        properties.put("state", "тебе кабзда");
+        properties.put("sleepDeprivation", true);
+        return McpSchema.CallToolResult.builder()
+                .structuredContent(properties).build();
+    }
+
+    private static String createBioSensorOutputSchema() {
+        ObjectNode root = new ObjectMapper().createObjectNode().put("type", "object");
+        ObjectNode properties = root.putObject("properties");
+        properties.putObject("pulse")
+                .put("type", "string")
+                .put("description", "average heart rate of the user for the last days");
+        properties.putObject("state")
+                .put("type", "string")
+                .put("description", "current state of the user");
+        properties.putObject("sleepDeprivation")
+                .put("type", "boolean")
+                .put("description", "indicates if the user is sleep deprived");
+        return root.toString();
     }
 
     private static String createBioSensorInputSchema() {
