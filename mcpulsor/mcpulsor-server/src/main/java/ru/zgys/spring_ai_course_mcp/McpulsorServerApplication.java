@@ -14,9 +14,29 @@ import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
+import static ru.zgys.spring_ai_course_mcp.MedicalProfileProvider.getMedicalProfile;
+import static ru.zgys.spring_ai_course_mcp.PulseCalculator.getPulse;
+
 public class McpulsorServerApplication {
+
+    private static final String SAMPLING_SYSTEM_PROMPT = """
+            Ты ставишь диагноз одним словом.
+            
+            На вход всегда получаешь медицинскую карту человека и его текущий пульс.
+            
+            Твоя задача — выдать ровно одно:
+            название существующей болезни (может быть 1-3 слова, можно редкие или забавно звучащие),
+            или
+            
+            Ответ: -сказать что пациент здоров.
+            Правила:
+            — Анализируй карту пациента и пульс и выбирай подходящую болезнь.
+            — Отвечай только названием болезни или фразой что пациент здоров.
+            — Никаких пояснений, никакого текста вокруг.
+            """;
 
     @SneakyThrows
     public static void main(String... args) {
@@ -25,6 +45,39 @@ public class McpulsorServerApplication {
         var transportProvider = HttpServletStreamableServerTransportProvider.builder()
                 .mcpEndpoint("/mcpulsor")
                 .build();
+
+        McpSchema.Tool diagnostatorTool = McpSchema.Tool.builder()
+                .name("diagnostator")
+                .title("Диагностика по имени")
+                .description("Используется для получения диагноза по имени человека. Всегда возвращает либо название болезни, либо сообщение, что человек ничем не болеет.")
+                .inputSchema(new JacksonMcpJsonMapper(new ObjectMapper()), createDiagnostatorInputSchema())
+                .build();
+
+        McpServerFeatures.SyncToolSpecification diagnostatorToolSpec = McpServerFeatures.SyncToolSpecification.builder()
+                .tool(diagnostatorTool)
+                .callHandler((mcpSyncServerExchange, callToolRequest) -> {
+                            System.out.println("Может делать семплинг? :" + mcpSyncServerExchange.getClientCapabilities().sampling().toString());
+                            String name = callToolRequest.arguments().get("name").toString();
+                            int pulse = getPulse(name);
+                            String medicalProfile = getMedicalProfile(name);
+                            String samplingPrompt = "Вот такой у нас пациент, вот его медицинская карта " + medicalProfile + " а вот его текущий пульс " + pulse;
+
+                            McpSchema.CreateMessageRequest samplingMessageRequest = McpSchema.CreateMessageRequest.builder()
+                                    .systemPrompt(SAMPLING_SYSTEM_PROMPT)
+                                    .temperature(0.1)
+                                    .maxTokens(50)
+                                    .messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER, new McpSchema.TextContent(samplingPrompt))))
+                                    .build();
+                            McpSchema.CreateMessageResult samplingResult = mcpSyncServerExchange.createMessage(samplingMessageRequest);
+
+                            McpSchema.LoggingMessageNotification.builder().data("я сервер и рещил спросить вот это "+ samplingPrompt
+                            + "\n а в ответ получил "+ samplingResult.content()).build();
+
+                            return McpSchema.CallToolResult.builder()
+                                    .addContent(samplingResult.content())
+                                    .build();
+                        }
+                ).build();
 
         McpSchema.Tool bioSensorTool = McpSchema.Tool.builder()
                 .name("bioSensor")
@@ -37,8 +90,11 @@ public class McpulsorServerApplication {
         McpServerFeatures.SyncToolSpecification bioSensorToolSpec = McpServerFeatures.SyncToolSpecification.builder()
                 .tool(bioSensorTool)
                 .callHandler((mcpSyncServerExchange, callToolRequest) -> {
-                    Integer days = (Integer) callToolRequest.arguments().get("days");
-                    return calculateResult(days);
+                            String serverLogMessage = "Сервер говорит: я тут получил такой запрос на вызов тула: " + callToolRequest.toString();
+                            System.out.println(serverLogMessage);
+                            mcpSyncServerExchange.loggingNotification(McpSchema.LoggingMessageNotification.builder().data(serverLogMessage).build());
+                            Integer days = (Integer) callToolRequest.arguments().get("days");
+                            return calculateResult(days);
                         }
                 )
                 .build();
@@ -46,7 +102,7 @@ public class McpulsorServerApplication {
         McpServer.sync(transportProvider)
                 .serverInfo("mcpulsor mcp server", "1.0.0.RELEASE")
                 .capabilities(createServerCapabilities())
-                .tools(bioSensorToolSpec)
+                .tools(bioSensorToolSpec, diagnostatorToolSpec)
                 .build();
 
         Server server = new Server(8091);
@@ -59,6 +115,16 @@ public class McpulsorServerApplication {
         server.start();
         server.join();
 
+    }
+
+    private static String createDiagnostatorInputSchema() {
+        ObjectNode root = new ObjectMapper().createObjectNode().put("type", "object");
+        root.putObject("properties")
+                .putObject("name")
+                .put("type", "string")
+                .put("description", "Имя пациента, по которому необходимо определить текущий диагноз.");
+        root.putArray("required").add("name");
+        return root.toString();
     }
 
     private static McpSchema.CallToolResult calculateResult(Integer days) {
